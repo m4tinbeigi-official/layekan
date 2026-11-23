@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="کلیک روی ناحیه‌ی هایلایت یا خط‌کشی‌شده‌ی هر تصویر، و بازیابی خودکار محتوای زیر آن. کاملاً در مرورگر، بدون سرور.">
+<title>لایه‌کَن: آشکارسازی متن زیر خط‌کشی و هایلایت</title>
+<style>
+  :root{
+    --bg:#faf9f7;
+    --ink:#1c1b1a;
+    --muted:#5c5955;
+    --line:#dcd8d2;
+    --card:#ffffff;
+    --accent:#b3261e;
+    --accent-dark:#8f1f18;
+  }
+  *{box-sizing:border-box}
+  html{font-size:16px}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Vazirmatn","Segoe UI",Tahoma,Arial,sans-serif;
+    line-height:1.8;
+  }
+  .wrap{max-width:980px;margin:0 auto;padding:0 1rem}
+  header{border-bottom:1px solid var(--line);padding:1.5rem 0 1.25rem}
+  h1{margin:0;font-size:1.5rem;line-height:1.4}
+  .tagline{margin:.35rem 0 0;color:var(--muted);font-size:.95rem}
+  main{padding:1.25rem 0 2rem}
+  button{
+    font:inherit;cursor:pointer;border-radius:8px;min-height:44px;
+    padding:.4rem 1rem;border:1px solid var(--ink);background:var(--ink);color:#fff;
+  }
+  button:hover{background:#000}
+  button:active{transform:translateY(1px)}
+  button:disabled{cursor:not-allowed;opacity:.5}
+  button.ghost{background:transparent;color:var(--ink)}
+  button.ghost:hover{background:#efece7}
+  button.accent{background:var(--accent);border-color:var(--accent)}
+  button.accent:hover{background:var(--accent-dark)}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  label{display:block;font-weight:600;margin-bottom:.25rem}
+
+  /* دراپ‌زون: حالت خالی */
+  #dropzone{
+    display:block;border:2px dashed var(--line);border-radius:12px;
+    background:var(--card);padding:3rem 1.5rem;text-align:center;cursor:pointer;
+  }
+  #dropzone:hover{border-color:var(--accent)}
+  #dropzone input{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+  #dropzone .big{font-size:1.1rem;font-weight:700;margin:0 0 .35rem}
+  #dropzone .hint{color:var(--muted);margin:0;font-size:.9rem}
+  #dropzone .btn-hint{display:inline-block;margin-top:1rem}
+
+  /* ویرایشگر */
+  #editor{display:none}
+  #editor.on{display:block}
+  .toolbar{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-bottom:.75rem}
+  #busy{color:var(--muted);font-size:.9rem}
+  #stage{position:relative;border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+  #stage canvas{display:block;width:100%;height:auto}
+  #overlay{position:absolute;inset:0;width:100%;height:100%}
+  #canvas{cursor:crosshair}
+  #hintbar{color:var(--muted);font-size:.9rem;margin:.6rem 0 0}
+  kbd{font-family:inherit;border:1px solid var(--line);border-radius:4px;padding:0 .35rem;background:#fff;font-size:.85em}
+
+  .controls{
+    margin-top:1rem;background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:1rem;display:grid;gap:1rem;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+  }
+  .ctl label{display:flex;justify-content:space-between;align-items:baseline}
+  .ctl output{font-weight:400;color:var(--muted)}
+  .ctl input[type=range]{width:100%;accent-color:var(--accent);min-height:44px}
+  .ctl .mini{font-size:.8rem;min-height:32px;padding:.1rem .6rem}
+  #picks{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;min-height:2.2rem}
+  #picks .chip{display:inline-flex;align-items:center;gap:.4rem;border:1px solid var(--line);border-radius:8px;padding:.25rem .5rem;background:#fff}
+  #picks .chip button{min-height:28px;padding:0 .45rem;border:1px solid var(--line);background:#fff;color:var(--accent);border-radius:6px}
+  #picks .swatch{width:1.1rem;height:1.1rem;border-radius:4px;border:1px solid var(--line);display:inline-block}
+
+  details{margin-top:1.5rem;border-top:1px solid var(--line);padding-top:1rem}
+  summary{cursor:pointer;font-weight:700;min-height:44px;display:flex;align-items:center}
+  details p{margin:.5rem 0}
+  .formula{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.6rem 1rem;direction:ltr;text-align:left;font-family:Consolas,Menlo,monospace;font-size:.95rem;overflow-x:auto}
+  .warn{margin-top:1.5rem;background:#fdf3f2;border:1px solid #f0c9c6;border-radius:12px;padding:1rem 1.25rem}
+  .warn h2{margin:.25rem 0 .5rem;font-size:1.05rem}
+  .warn ul{margin:.25rem 0;padding-inline-start:1.4rem}
+  footer{border-top:1px solid var(--line);padding:1rem 0 2rem;color:var(--muted);font-size:.9rem}
+  @media (max-width:560px){
+    h1{font-size:1.2rem}
+    .controls{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>لایه‌کَن</h1>
+    <p class="tagline">روی هر جای تصویر که هایلایت یا خط‌کشی شده کلیک کن؛ محتوای زیرش خودکار آشکار می‌شود. همه‌چیز داخل مرورگر پردازش می‌شود و هیچ تصویری جایی ارسال نمی‌شود.</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- حالت خالی: بارگذاری تصویر -->
+  <label id="dropzone">
+    <input type="file" id="file" accept="image/*">
+    <span class="big">تصویر را اینجا رها کن یا برای انتخاب کلیک کن</span>
+    <span class="hint">PNG، JPG، WebP و...</span>
+    <span class="btn-hint ghost">انتخاب فایل</span>
+  </label>
+
+  <!-- ویرایشگر -->
+  <section id="editor" aria-label="ویرایشگر تصویر">
+    <div class="toolbar">
+      <button type="button" id="btnNew" class="ghost">تصویر جدید</button>
+      <button type="button" id="btnReset" class="ghost">بازنشانی</button>
+      <button type="button" id="btnDownload" class="accent">دانلود خروجی PNG</button>
+      <span id="busy" role="status" hidden>در حال پردازش...</span>
+    </div>
+
+    <div id="stage">
+      <canvas id="canvas" tabindex="0" aria-label="تصویر. با کلیک، رنگ ناحیه‌ی مخدوش‌شده برداشته می‌شود. با کلیدهای جهت‌نما نشانه‌گذار را حرکت بده و با Enter بردار."></canvas>
+      <canvas id="overlay" aria-hidden="true"></canvas>
+    </div>
+    <p id="hintbar">روی ناحیه‌ی هایلایت‌شده کلیک کن. <kbd>Tab</kbd> تا تصویر، بعد <kbd>جهت‌نما</kbd> برای حرکت نشانه‌گذار و <kbd>Enter</kbd> برای برداشتن رنگ.</p>
+
+    <div class="controls">
+      <div class="ctl">
+        <label for="alpha">شفافیت جوهر (α) <output id="alphaOut">خودکار</output></label>
+        <input type="range" id="alpha" min="20" max="95" value="75">
+        <button type="button" id="btnAutoAlpha" class="ghost mini">حالت خودکار α</button>
+      </div>
+      <div class="ctl">
+        <label for="tol">تلورانس رنگ <output id="tolOut">۳۰ درجه</output></label>
+        <input type="range" id="tol" min="8" max="90" value="30">
+      </div>
+      <div class="ctl">
+        <label for="strength">شدت بازیابی <output id="strengthOut">۱۰۰٪</output></label>
+        <input type="range" id="strength" min="10" max="100" value="100">
+      </div>
+      <div id="picks" aria-label="رنگ‌های برداشته‌شده"></div>
+    </div>
+  </section>
+
+  <details>
+    <summary>چطور کار می‌کند؟</summary>
+    <p>ابزار هایلایت و خط‌کشی معمولاً پیکسل‌های زیر خود را حذف نمی‌کند؛ فقط روی آنها ترکیب می‌شود. رنگ هر پیکسل یک ترکیب از رنگ جوهر و رنگ واقعی زیر آن است:</p>
+    <p class="formula">observed = a × marker + (1 − a) × hidden</p>
+    <p>ابزار اول با کلیک شما رنگ جوهر را برمی‌دارد، بعد α (شفافیت جوهر) را از روشن‌ترین پیکسل‌های همان ناحیه تخمین می‌زند و ترکیب را وارونه می‌کند:</p>
+    <p class="formula">hidden = (observed − a × marker) ÷ (1 − a)</p>
+    <p>در پایان روی پیکسل‌های بازیابی‌شده یک کشش خودکار کنتراست (درصدی ۲ تا ۹۸) اجرا می‌شود. همین کار را که در GIMP با کشیدن منحنی روی کانال Value دستی انجام می‌شد، اینجا خودکار می‌کند. هر رنگ دیگری هم در تصویر خط خورده باشد، کافی است روی آن هم کلیک کنی.</p>
+  </details>
+
+  <section class="warn" aria-labelledby="warnTitle">
+    <h2 id="warnTitle">سمت مقابل: پوشانه‌کردنِ درست چطور است؟</h2>
+    <ul>
+      <li>از هایلایتر و ماژیکِ نیمه‌شفاف استفاده نکن؛ یک مستطیل کاملاً مات سیاه بکش.</li>
+      <li>قبل از خط‌کشی، از سند اسکرین‌شات بگیر و روی اسکرین‌شات کار کن تا لایه‌ی اصلی و متادیتا از بین برود.</li>
+      <li>وقتی اطلاعات حیاتی است، به‌جای پوشاندن، همان قسمت را برش بزن (Crop) و بعد اسکرین‌شات نهایی را دوباره ذخیره کن.</li>
+    </ul>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">بدون سرور، بدون آپلود. پردازش کامل تصویر در مرورگر شما انجام می‌شود.</div>
+</footer>
+
+<script>
+(function(){
+  'use strict';
+  var $ = function(s){ return document.querySelector(s); };
+  var canvas = $('#canvas'), ctx = canvas.getContext('2d', {willReadFrequently:true});
+  var overlay = $('#overlay'), octx = overlay.getContext('2d');
+  var orig = null;          // ImageData اصلی
+  var picks = [];           // [{rgb:[r,g,b], h: hue}]
+  var alphaAuto = true;     // α خودکار تا وقتی کاربر دستی تنظیم کند
+  var cross = null;         // نشانه‌گذار کیبورد {x,y}
+  var rafPending = false;
+  var params = {tol:30, strength:100};
+  var faDigits = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
+  function fa(n){ return String(n).replace(/\d/g, function(d){ return faDigits[+d]; }); }
+
+  // ---------- پیام‌ها (toast) ----------
+  var toastEl = null;
+  function toast(msg){
+    if(!toastEl){
+      toastEl = document.createElement('p');
+      toastEl.setAttribute('role','status');
+      toastEl.style.cssText = 'position:fixed;bottom:1rem;right:50%;transform:translateX(50%);'+
+        'background:var(--ink);color:#fff;padding:.6rem 1rem;border-radius:8px;font-size:.9rem;'+
+        'max-width:90vw;z-index:10;box-shadow:0 2px 8px rgba(0,0,0,.25)';
+      document.body.appendChild(toastEl);
+    }
+    toastEl.textContent = msg;
+    toastEl.hidden = false;
+    clearTimeout(toast.t);
+    toast.t = setTimeout(function(){ toastEl.hidden = true; }, 3500);
+  }
+
+  // ---------- HSV ----------
+  function rgb2hsv(r,g,b){
+    r/=255; g/=255; b/=255;
+    var mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx-mn, h = 0;
+    if(d){
+      if(mx===r) h = ((g-b)/d)%6;
+      else if(mx===g) h = (b-r)/d+2;
+      else h = (r-g)/d+4;
+      h *= 60; if(h<0) h += 360;
+    }
+    return [h, mx ? d/mx : 0, mx];
+  }
+  function hueDist(a,b){
+    var d = Math.abs(a-b) % 360;
+    return d > 180 ? 360-d : d;
+  }
+
+  // ---------- بارگذاری تصویر ----------
+  function loadImage(file){
+    if(!file){ return; }
+    if(!file.type || file.type.indexOf('image/') !== 0){
+      toast('این فایل تصویر نیست؛ یک PNG یا JPG انتخاب کن.');
+      return;
+    }
+    var url = URL.createObjectURL(file);
+    var img = new Image();
+    img.onload = function(){
+      URL.revokeObjectURL(url);
+      var MAX = 4096;
+      var w = img.naturalWidth, h = img.naturalHeight;
+      var s = Math.min(1, MAX/Math.max(w,h));
+      w = Math.max(1, Math.round(w*s)); h = Math.max(1, Math.round(h*s));
+      canvas.width = w; canvas.height = h;
+      overlay.width = w; overlay.height = h;
+      ctx.drawImage(img, 0, 0, w, h);
+      orig = ctx.getImageData(0, 0, w, h);
+      picks = []; cross = null; alphaAuto = true;
+      drawOverlay();
+      renderPicks();
+      $('#dropzone').style.display = 'none';
+      $('#editor').classList.add('on');
+      $('#alphaOut').textContent = 'خودکار';
+      toast('آماده است. روی ناحیه‌ی هایلایت یا خط‌کشی‌شده کلیک کن.');
+    };
+    img.onerror = function(){
+      URL.revokeObjectURL(url);
+      toast('خواندن این تصویر ممکن نشد.');
+    };
+    img.src = url;
+  }
+
+  $('#file').addEventListener('change', function(e){ loadImage(e.target.files[0]); e.target.value=''; });
+  var dz = $('#dropzone');
+  ['dragover','dragenter'].forEach(function(ev){
+    dz.addEventListener(ev, function(e){ e.preventDefault(); dz.style.borderColor='var(--accent)'; });
+  });
+  ['dragleave','drop'].forEach(function(ev){
+    dz.addEventListener(ev, function(e){ e.preventDefault(); dz.style.borderColor=''; });
+  });
+  dz.addEventListener('drop', function(e){
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    loadImage(f);
+  });
+
+  // ---------- برداشتن رنگ با کلیک ----------
+  canvas.addEventListener('pointerdown', function(e){
+    var r = canvas.getBoundingClientRect();
+    var x = Math.round((e.clientX - r.left) * canvas.width / r.width);
+    var y = Math.round((e.clientY - r.top) * canvas.height / r.height);
+    cross = {x:x, y:y};
+    drawOverlay();
+    pickAt(x, y);
+  });
+
+  function pickAt(x, y){
+    if(!orig) return;
+    var sx = Math.max(0, x-4), sy = Math.max(0, y-4);
+    var sw = Math.min(9, canvas.width - sx), sh = Math.min(9, canvas.height - sy);
+    if(sw<=0 || sh<=0) return;
+    var d = ctx.getImageData(sx, sy, sw, sh).data;
+    var r=0,g=0,b=0,cnt=0;
+    for(var i=0;i<sw*sh;i++){
+      var pr=d[i*4], pg=d[i*4+1], pb=d[i*4+2];
+      var hsv = rgb2hsv(pr,pg,pb);
+      if(hsv[1] >= 0.22){ r+=pr; g+=pg; b+=pb; cnt++; }
+    }
+    if(!cnt){
+      var c0 = (y-sy)*sw + (x-sx);
+      r=d[c0*4]; g=d[c0*4+1]; b=d[c0*4+2]; cnt=1;
+    }
+    r=Math.round(r/cnt); g=Math.round(g/cnt); b=Math.round(b/cnt);
+    var hsv = rgb2hsv(r,g,b);
+    if(hsv[1] < 0.15){
+      toast('رنگ این نقطه اشباع کمی دارد؛ روی خودِ خط یا هایلایتِ رنگی کلیک کن.');
+      return;
+    }
+    if(picks.length >= 6) picks.shift();
+    picks.push({rgb:[r,g,b], h:hsv[0]});
+    renderPicks();
+    scheduleProcess();
+  }
+
+  function renderPicks(){
+    var box = $('#picks');
+    box.innerHTML = '';
+    if(!picks.length){
+      var p = document.createElement('span');
+      p.style.color = 'var(--muted)';
+      p.style.fontSize = '.9rem';
+      p.textContent = 'هنوز رنگی برداشته نشده. با کلیک روی تصویر، رنگ جوهر اینجا جمع می‌شود.';
+      box.appendChild(p);
+      return;
+    }
+    picks.forEach(function(pk, idx){
+      var chip = document.createElement('span');
+      chip.className = 'chip';
+      var sw = document.createElement('span');
+      sw.className = 'swatch';
+      sw.style.background = 'rgb('+pk.rgb.join(',')+')';
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = '×';
+      btn.setAttribute('aria-label', 'حذف رنگ ' + fa(idx+1));
+      btn.addEventListener('click', function(){
+        picks.splice(idx,1);
+        renderPicks();
+        scheduleProcess();
+      });
+      chip.appendChild(sw);
+      chip.appendChild(btn);
+      box.appendChild(chip);
+    });
+  }
+
+  // ---------- نشانه‌گذار کیبورد ----------
+  canvas.addEventListener('keydown', function(e){
+    if(!orig) return;
+    var step = e.shiftKey ? 24 : 6;
+    var moved = false;
+    if(e.key === 'ArrowLeft'){ cross = cross||{x:0,y:0}; cross.x = Math.max(0, cross.x-step); moved = true; }
+    else if(e.key === 'ArrowRight'){ cross = cross||{x:0,y:0}; cross.x = Math.min(canvas.width-1, cross.x+step); moved = true; }
+    else if(e.key === 'ArrowUp'){ cross = cross||{x:0,y:0}; cross.y = Math.max(0, cross.y-step); moved = true; }
+    else if(e.key === 'ArrowDown'){ cross = cross||{x:0,y:0}; cross.y = Math.min(canvas.height-1, cross.y+step); moved = true; }
+    else if(e.key === 'Enter' || e.key === ' '){
+      e.preventDefault();
+      if(!cross) cross = {x: canvas.width>>1, y: canvas.height>>1};
+      pickAt(cross.x, cross.y);
+      return;
+    }
+    if(moved){
+      e.preventDefault();
+      drawOverlay();
+      canvas.scrollIntoView({block:'nearest'});
+    }
+  });
+
+  function drawOverlay(){
+    octx.clearRect(0,0,overlay.width,overlay.height);
+    if(!cross || !orig) return;
+    var s = canvas.width / canvas.getBoundingClientRect().width;
+    var r = Math.max(10, Math.round(9*s));
+    octx.strokeStyle = '#b3261e';
+    octx.lineWidth = Math.max(2, Math.round(2*s));
+    octx.beginPath();
+    octx.moveTo(cross.x-r, cross.y); octx.lineTo(cross.x-3, cross.y);
+    octx.moveTo(cross.x+3, cross.y); octx.lineTo(cross.x+r, cross.y);
+    octx.moveTo(cross.x, cross.y-r); octx.lineTo(cross.x, cross.y-3);
+    octx.moveTo(cross.x, cross.y+3); octx.lineTo(cross.x, cross.y+r);
+    octx.stroke();
+    octx.beginPath();
+    octx.arc(cross.x, cross.y, 6*s, 0, Math.PI*2);
+    octx.stroke();
+  }
+
+  // ---------- پردازش اصلی ----------
+  function scheduleProcess(){
+    if(rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(function(){
+      rafPending = false;
+      process();
+    });
+  }
+
+  function process(){
+    if(!orig) return;
+    var busy = $('#busy');
+    busy.hidden = false;
+    setTimeout(function(){
+      try{ doProcess(); }
+      catch(err){ toast('پردازش با خطا متوقف شد: ' + err.message); }
+      finally{ busy.hidden = true; }
+    }, 30);
+  }
+
+  function doProcess(){
+    var w = canvas.width, h = canvas.height, n = w*h;
+    var src = orig.data;
+    var out = ctx.createImageData(w, h);
+    out.data.set(src);
+    if(!picks.length){
+      ctx.putImageData(out, 0, 0);
+      return;
+    }
+    var tolH = params.tol;
+    var wmap = new Uint8Array(n);
+    var best = new Int16Array(n);
+    var strong = 0, i, c, p;
+    for(i=0; i<n; i++){
+      var R=src[i*4], G=src[i*4+1], B=src[i*4+2];
+      var hsv = rgb2hsv(R,G,B);
+      if(hsv[1] < 0.18) continue;
+      var bw = 0, bi = -1;
+      for(p=0; p<picks.length; p++){
+        var hd = hueDist(hsv[0], picks[p].h);
+        if(hd < tolH){
+          var wgt = 1 - hd/tolH;
+          if(wgt > bw){ bw = wgt; bi = p; }
+        }
+      }
+      if(bi >= 0){
+        wmap[i] = (bw*255)|0;
+        best[i] = bi;
+        if(bw > 0.78) strong++;
+      }
+    }
+    if(strong < 80){
+      ctx.putImageData(out, 0, 0);
+      toast('پیکسل هم‌رنگ کافی پیدا نشد؛ تلورانس را بیشتر کن یا دقیق‌تر روی خط کلیک کن.');
+      return;
+    }
+
+    // تخمین خودکار α: روشن‌ترین پیکسل‌های منطبق، کاغذ زیر جوهر فرض می‌شوند
+    var a;
+    if(alphaAuto){
+      a = autoAlpha(src, wmap, best, n, strong);
+      $('#alpha').value = Math.round(a*100);
+      $('#alphaOut').textContent = fa(Math.round(a*100)) + '٪ (خودکار)';
+    } else {
+      a = params.alpha;
+    }
+
+    // وارونه‌سازی ترکیب آلفا
+    var inv = 1/(1-a);
+    for(i=0; i<n; i++){
+      if(!wmap[i]) continue;
+      var m = picks[best[i]].rgb;
+      for(c=0; c<3; c++){
+        var rec = (src[i*4+c] - a*m[c]) * inv;
+        out.data[i*4+c] = rec < 0 ? 0 : rec > 255 ? 255 : rec|0;
+      }
+    }
+
+    // کشش خودکار کنتراست (صدک ۲ تا ۹۸) روی پیکسل‌های منطبق
+    var hist = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
+    for(i=0; i<n; i++){
+      if(wmap[i] >= 200){
+        for(c=0; c<3; c++) hist[c][out.data[i*4+c]]++;
+      }
+    }
+    var lo = [0,0,0], hi = [255,255,255];
+    for(c=0; c<3; c++){
+      var H = hist[c], acc = 0, need = Math.max(1, Math.round(strong*0.02)), v;
+      for(v=0; v<256; v++){ acc += H[v]; if(acc >= need){ lo[c]=v; break; } }
+      acc = 0;
+      for(v=255; v>=0; v--){ acc += H[v]; if(acc >= need){ hi[c]=v; break; } }
+      if(hi[c] < lo[c]+10) hi[c] = lo[c]+10;
+    }
+    var st = params.strength/100;
+    for(i=0; i<n; i++){
+      var wgt = wmap[i]/255*st;
+      if(!wgt) continue;
+      for(c=0; c<3; c++){
+        var val = out.data[i*4+c];
+        var s2 = (val - lo[c]) / (hi[c] - lo[c]) * 255;
+        s2 = s2 < 0 ? 0 : s2 > 255 ? 255 : s2;
+        out.data[i*4+c] = (src[i*4+c]*(1-wgt) + s2*wgt) | 0;
+      }
+    }
+    ctx.putImageData(out, 0, 0);
+  }
+
+  function autoAlpha(src, wmap, best, n, strong){
+    var hist = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
+    var domCount = {}, domIdx = 0, domMax = 0, i, c;
+    for(i=0; i<n; i++){
+      if(wmap[i] >= 200){
+        for(c=0; c<3; c++) hist[c][src[i*4+c]]++;
+        domCount[best[i]] = (domCount[best[i]]||0) + 1;
+      }
+    }
+    for(var k in domCount){
+      if(domCount[k] > domMax){ domMax = domCount[k]; domIdx = +k; }
+    }
+    var m = picks[domIdx].rgb;
+    var need = Math.max(1, Math.round(strong*0.02));
+    var cands = [];
+    for(c=0; c<3; c++){
+      var obs98 = 255, acc = 0, v;
+      for(v=255; v>=0; v--){ acc += hist[c][v]; if(acc >= need){ obs98 = v; break; } }
+      var denom = 246 - m[c];
+      if(Math.abs(denom) > 45){
+        var al = (246 - obs98) / denom;
+        if(al > 0.2 && al < 0.97) cands.push(al);
+      }
+    }
+    if(!cands.length) return 0.75;
+    cands.sort(function(x,y){ return x-y; });
+    var med = cands[cands.length >> 1];
+    return Math.min(0.92, Math.max(0.35, med));
+  }
+
+  // ---------- کنترل‌ها ----------
+  $('#alpha').addEventListener('input', function(){
+    alphaAuto = false;
+    params.alpha = +this.value/100;
+    $('#alphaOut').textContent = fa(this.value) + '٪';
+    scheduleProcess();
+  });
+  $('#btnAutoAlpha').addEventListener('click', function(){
+    alphaAuto = true;
+    scheduleProcess();
+  });
+  $('#tol').addEventListener('input', function(){
+    params.tol = +this.value;
+    $('#tolOut').textContent = fa(this.value) + ' درجه';
+    scheduleProcess();
+  });
+  $('#strength').addEventListener('input', function(){
+    params.strength = +this.value;
+    $('#strengthOut').textContent = fa(this.value) + '٪';
+    scheduleProcess();
+  });
+
+  $('#btnReset').addEventListener('click', function(){
+    if(!orig) return;
+    picks = []; alphaAuto = true; cross = null;
+    $('#alphaOut').textContent = 'خودکار';
+    ctx.putImageData(orig, 0, 0);
+    drawOverlay();
+    renderPicks();
+  });
+  $('#btnNew').addEventListener('click', function(){
+    picks = []; orig = null; cross = null;
+    $('#editor').classList.remove('on');
+    $('#dropzone').style.display = '';
+  });
+  $('#btnDownload').addEventListener('click', function(){
+    if(!orig) return;
+    canvas.toBlob(function(b){
+      if(!b){ toast('ساخت فایل خروجی ناموفق بود.'); return; }
+      var aEl = document.createElement('a');
+      aEl.href = URL.createObjectURL(b);
+      aEl.download = 'layekan-output.png';
+      aEl.click();
+      setTimeout(function(){ URL.revokeObjectURL(aEl.href); }, 1500);
+    }, 'image/png');
+  });
+
+  window.addEventListener('resize', drawOverlay);
+  renderPicks();
+})();
+</script>
+</body>
+</html>
